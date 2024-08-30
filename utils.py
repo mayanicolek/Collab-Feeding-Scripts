@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import pickle as pkl
 import sys
 from scipy.interpolate import interp1d
-import pygame
+# import pygame
 import pyrealsense2 as rs
 from tkinter import *
 from tkinter.ttk import *
@@ -19,103 +19,229 @@ from queue import Queue
 import serial  
 
 
-def food_present(root):
-    continue_trig = StringVar(root, "1")
-    Radiobutton(root, text="Food picked successfully?",style = 'W.TButton', variable=continue_trig, width=25, value = 'c').grid(row = 6, column = 0,columnspan=3)
-    Radiobutton(root, text="Food NOT picked successfully?",style = 'W.TButton', variable=continue_trig, width=25, value = 'd').grid(row = 6, column = 4,columnspan=3)
-    while continue_trig.get() == "1":
-        root.update()
-    return root, continue_trig
+##########################################
+class GUI_Display:
+    def __init__(self, root):
+        self.root = root
 
-def more_food_gui(root):
-    repeat_trig = StringVar(root, "1")
-    Radiobutton(root, text="Ready for more food?",style = 'W.TButton', variable=repeat_trig, width=54, value = {"CONTINUE": 'c'}).grid(row = 8,column=0, columnspan = 6)
-    while repeat_trig.get() == "1":
-        root.update()
-    return root
+    def food_present(self):
 
-def continue_feeding_gui(root):
-    feed_trig = StringVar(root, "1")
-    Radiobutton(root, text="Ready to Eat?", style = 'W.TButton',variable=feed_trig, width=54, value = {"CONTINUE": 'c'}).grid(row=7,column=0, columnspan=6)
-    while feed_trig.get() == "1":
-        root.update()
-    return root
+        continue_trig = StringVar(self.root, "1")
+        Radiobutton(self.root, text="Food picked successfully?",style = 'W.TButton', variable=continue_trig, width=25, value = 'c').grid(row = 6, column = 0,columnspan=3)
+        Radiobutton(self.root, text="Food NOT picked successfully?",style = 'W.TButton', variable=continue_trig, width=25, value = 'd').grid(row = 6, column = 4,columnspan=3)
 
-def continue_acquiring_gui(root):
-    food_trig = StringVar(root, "1")
-    Radiobutton(root, text="Ready to Pick Food?",style = 'W.TButton', variable=food_trig, width=75, value = {"CONTINUE": 'c'}).grid(row = 2,column=0, columnspan = 6)
-    while food_trig.get() == "1":
-        root.update()
-    return root
+        self.root.wait_variable(continue_trig)
+        return continue_trig
 
-def choose_food_gui(root, image, centers, major_axes):
-    Label(root,text='What food would you like to pick?').grid(row = 3,column=0, columnspan = 6)
-    food_trig = StringVar(root,"a")
-    img_tk_dict = {}
-    for idx in range(3):
-        try:
-            center = centers[idx]
-            x = center[0]
-            y = center[1]
-            food_img = image[y-25:y+25,x-25:x+25]
-            img_tk_dict[idx] = ImageTk.PhotoImage(Image.fromarray(food_img).resize((133,133)))
-        except:
-            img_tk_dict[idx] = ImageTk.PhotoImage(Image.fromarray(food_img).resize((133,133)))
-            print("not enough objects")
+    def more_food_gui(self):
 
-    names = list(range(3))
-    food_options = {name: value for name, value in zip(names, names)}
+        repeat_trig = StringVar(self.root, "1")
+        Radiobutton(self.root, text="Ready for more food?",style = 'W.TButton', variable=repeat_trig, width=54, value = {"CONTINUE": 'c'}).grid(row = 8,column=0, columnspan = 6)
 
-    for idx,(text, value) in enumerate(food_options.items()):
-        if idx < 3:
-            Label(root,image=img_tk_dict[idx]).grid(row = 4,column = idx*2,columnspan=2)
-            Radiobutton(root,text = text,style = 'W.TButton',variable = food_trig,value = value).grid(row = 5, column = idx*2) # ASK USER WHAT FOOD THEY WANT
+        self.root.wait_variable(repeat_trig)
 
-    while food_trig.get() == "a":
-        root.update()
+        
+    def continue_feeding_gui(self):
 
-    if food_trig.get() == '0':
-        center = centers[0]
-        major_axis = major_axes[0]
-    elif food_trig.get() == '1':
-        center = centers[1]
-        major_axis = major_axes[1]
-    elif food_trig.get() == '2':
-        center = centers[2]
-        major_axis = major_axes[2]
+        feed_trig = StringVar(self.root, "1")
+        Radiobutton(self.root, text="Ready to Eat?", style = 'W.TButton',variable=feed_trig, width=54, value = {"CONTINUE": 'c'}).grid(row=7,column=0, columnspan=6)
 
-    return root, img_tk_dict, center, major_axis
+        self.root.wait_variable(feed_trig)
 
-def choose_dish_gui(root,dish1_img,dish2_img, dish1_pos, dish2_pos):
-    root.withdraw()
-    root=Toplevel(root)
-    # root.geometry('400x465')
-    root.geometry('646x550')
-    #dish1_img = ImageEnhance.Color(dish1_img).enhance(2.5)
-    dish1_img = Image.fromarray(dish1_img).resize((250,250))
-    dish2_img = Image.fromarray(dish2_img).resize((250,250))
-    img1_tk = ImageTk.PhotoImage(dish1_img)
-    img2_tk = ImageTk.PhotoImage(dish2_img)
-    dish_trig = StringVar(root,"0")
-    dish_options = {"Dish_1" : '1',"Dish_2" : '2'}
-    #Label(root,width=20).grid(column=2,columnspan=3)
-    for(text, value) in dish_options.items():
-        if value == '1':
-            Label(root,image=img1_tk).grid(row = 0, column = 0,columnspan=3)
-            Radiobutton(root,text = text,style = 'W.TButton',variable = dish_trig,value = value, width = 25).grid(row = 1, column = 0,columnspan=3)
-        if value == '2':
-            Label(root,image=img2_tk).grid(row = 0, column = 3,columnspan=3)
-            Radiobutton(root,text = text,style = 'W.TButton',variable = dish_trig,value = value, width = 25).grid(row = 1, column = 3,columnspan=3)
+    def continue_acquiring_gui(self):
 
-    while dish_trig.get() == "0":
-        root.update()
+        food_trig = StringVar(self.root, "1")
+        Radiobutton(self.root, text="Ready to Pick Food?",style = 'W.TButton', variable=food_trig, width=75, value = {"CONTINUE": 'c'}).grid(row = 2,column=0, columnspan = 6)
 
-    if dish_trig.get() == '1':
-        des_pos = dish1_pos
-    elif dish_trig.get() == '2':
-        des_pos = dish2_pos
+        self.root.wait_variable(food_trig)
 
-    return root, img1_tk, img2_tk, des_pos
+    def choose_food_gui(self, image, centers, major_axes, actions):
+
+        Label(self.root,text='What food would you like to pick?').grid(row = 3,column=0, columnspan = 6)
+        food_trig = StringVar(self.root,"a")
+        img_tk_dict = {}
+        for idx in range(3):
+            try:
+                center = centers[idx]
+                x = center[0]
+                y = center[1]
+                food_img = image[y-25:y+25,x-25:x+25]
+                img_tk_dict[idx] = ImageTk.PhotoImage(Image.fromarray(food_img).resize((133,133)))
+            except:
+                img_tk_dict[idx] = ImageTk.PhotoImage(Image.fromarray(food_img).resize((133,133)))
+                print("not enough objects")
+
+        names = list(range(3))
+        food_options = {name: value for name, value in zip(names, names)}
+
+        for idx,(text, value) in enumerate(food_options.items()):
+            if idx < 3:
+                Label(self.root,image=img_tk_dict[idx]).grid(row = 4,column = idx*2,columnspan=2)
+                Radiobutton(self.root,text = text,style = 'W.TButton',variable = food_trig,value = value).grid(row = 5, column = idx*2,columnspan=2) # ASK USER WHAT FOOD THEY WANT
+
+        self.root.wait_variable(food_trig)
+
+        if food_trig.get() == '0':
+            center = centers[0]
+            major_axis = major_axes[0]
+            action = actions[0]
+        elif food_trig.get() == '1':
+            center = centers[1]
+            major_axis = major_axes[1]
+            action = actions[1]
+        elif food_trig.get() == '2':
+            center = centers[2]
+            major_axis = major_axes[2]
+            action = actions[2]
+
+        return img_tk_dict, center, major_axis, action
+
+    def choose_dish_gui(self,dish1_img,dish2_img, dish1_pos, dish2_pos):
+        # root=Toplevel(root)
+        self.root.geometry('646x650')
+        dish1_img = Image.fromarray(dish1_img).resize((321,321))
+        dish2_img = Image.fromarray(dish2_img).resize((321,321))
+        img1_tk = ImageTk.PhotoImage(dish1_img)
+        img2_tk = ImageTk.PhotoImage(dish2_img)
+        dish_trig = StringVar(self.root,"0")
+        dish_options = {"Plate" : '1',"Bowl" : '2'}
+        for(text, value) in dish_options.items():
+            if value == '1':
+                Label(self.root,image=img1_tk).grid(row = 0, column = 0,columnspan=3)
+                Radiobutton(self.root,text = text,style = 'W.TButton',variable = dish_trig,value = value, width = 25).grid(row = 1, column = 0,columnspan=3)
+            if value == '2':
+                Label(self.root,image=img2_tk).grid(row = 0, column = 3,columnspan=3)
+                Radiobutton(self.root,text = text,style = 'W.TButton',variable = dish_trig,value = value, width = 25).grid(row = 1, column = 3,columnspan=3)
+        
+        self.root.wait_variable(dish_trig)
+
+        if dish_trig.get() == '1':
+            des_pos = dish1_pos
+            des_dish = "plate"
+        elif dish_trig.get() == '2':
+            des_pos = dish2_pos
+            des_dish = "bowl"
+
+        return img1_tk, img2_tk, des_pos, des_dish
+        
+    def update(self):
+        self.root.update()
+    
+    def close(self):
+        self.root.withdraw()
+
+    def open(self):
+        self.root.deiconify()
+
+#######################################################
+
+# ##########################################
+
+# def food_present(root):
+#     continue_trig = StringVar(root, "1")
+#     Radiobutton(root, text="Food picked successfully?",style = 'W.TButton', variable=continue_trig, width=25, value = 'c').grid(row = 6, column = 0,columnspan=3)
+#     Radiobutton(root, text="Food NOT picked successfully?",style = 'W.TButton', variable=continue_trig, width=25, value = 'd').grid(row = 6, column = 4,columnspan=3)
+#     while continue_trig.get() == "1":
+#         root.update()
+#     return root, continue_trig
+
+# def more_food_gui(root):
+#     repeat_trig = StringVar(root, "1")
+#     Radiobutton(root, text="Ready for more food?",style = 'W.TButton', variable=repeat_trig, width=54, value = {"CONTINUE": 'c'}).grid(row = 8,column=0, columnspan = 6)
+#     while repeat_trig.get() == "1":
+#         root.update()
+#     return root
+
+# def continue_feeding_gui(root):
+#     feed_trig = StringVar(root, "1")
+#     Radiobutton(root, text="Ready to Eat?", style = 'W.TButton',variable=feed_trig, width=54, value = {"CONTINUE": 'c'}).grid(row=7,column=0, columnspan=6)
+#     while feed_trig.get() == "1":
+#         root.update()
+#     return root
+
+# def continue_acquiring_gui(root):
+#     food_trig = StringVar(root, "1")
+#     Radiobutton(root, text="Ready to Pick Food?",style = 'W.TButton', variable=food_trig, width=75, value = {"CONTINUE": 'c'}).grid(row = 2,column=0, columnspan = 6)
+#     while food_trig.get() == "1":
+#         root.update()
+#     return root
+
+# def choose_food_gui(root, image, centers, major_axes, actions):
+#     Label(root,text='What food would you like to pick?').grid(row = 3,column=0, columnspan = 6)
+#     food_trig = StringVar(root,"a")
+#     img_tk_dict = {}
+#     for idx in range(3):
+#         try:
+#             center = centers[idx]
+#             x = center[0]
+#             y = center[1]
+#             food_img = image[y-25:y+25,x-25:x+25]
+#             img_tk_dict[idx] = ImageTk.PhotoImage(Image.fromarray(food_img).resize((133,133)))
+#         except:
+#             img_tk_dict[idx] = ImageTk.PhotoImage(Image.fromarray(food_img).resize((133,133)))
+#             print("not enough objects")
+
+#     names = list(range(3))
+#     food_options = {name: value for name, value in zip(names, names)}
+
+#     for idx,(text, value) in enumerate(food_options.items()):
+#         if idx < 3:
+#             Label(root,image=img_tk_dict[idx]).grid(row = 4,column = idx*2,columnspan=2)
+#             Radiobutton(root,text = text,style = 'W.TButton',variable = food_trig,value = value).grid(row = 5, column = idx*2,columnspan=2) # ASK USER WHAT FOOD THEY WANT
+
+#     while food_trig.get() == "a":
+#         root.update()
+
+#     if food_trig.get() == '0':
+#         center = centers[0]
+#         major_axis = major_axes[0]
+#         action = actions[0]
+#     elif food_trig.get() == '1':
+#         center = centers[1]
+#         major_axis = major_axes[1]
+#         action = actions[1]
+#     elif food_trig.get() == '2':
+#         center = centers[2]
+#         major_axis = major_axes[2]
+#         action = actions[2]
+
+#     return root, img_tk_dict, center, major_axis, action
+
+# def choose_dish_gui(root,dish1_img,dish2_img, dish1_pos, dish2_pos):
+#     root.withdraw()
+#     root=Toplevel(root)
+#     # root.geometry('400x465')
+#     # root.geometry('646x550')
+#     root.geometry('646x650')
+#     #dish1_img = ImageEnhance.Color(dish1_img).enhance(2.5)
+#     dish1_img = Image.fromarray(dish1_img).resize((321,321))
+#     dish2_img = Image.fromarray(dish2_img).resize((321,321))
+#     img1_tk = ImageTk.PhotoImage(dish1_img)
+#     img2_tk = ImageTk.PhotoImage(dish2_img)
+#     dish_trig = StringVar(root,"0")
+#     dish_options = {"Plate" : '1',"Bowl" : '2'}
+#     #Label(root,width=20).grid(column=2,columnspan=3)
+#     for(text, value) in dish_options.items():
+#         if value == '1':
+#             Label(root,image=img1_tk).grid(row = 0, column = 0,columnspan=3)
+#             Radiobutton(root,text = text,style = 'W.TButton',variable = dish_trig,value = value, width = 25).grid(row = 1, column = 0,columnspan=3)
+#         if value == '2':
+#             Label(root,image=img2_tk).grid(row = 0, column = 3,columnspan=3)
+#             Radiobutton(root,text = text,style = 'W.TButton',variable = dish_trig,value = value, width = 25).grid(row = 1, column = 3,columnspan=3)
+
+#     while dish_trig.get() == "0":
+#         root.update()
+
+#     if dish_trig.get() == '1':
+#         des_pos = dish1_pos
+#         des_dish = "plate"
+#     elif dish_trig.get() == '2':
+#         des_pos = dish2_pos
+#         des_dish = "bowl"
+
+#     return root, img1_tk, img2_tk, des_pos, des_dish
+
+# #######################################################
 
 
 def append_data(data, timestamp, cur_pos, wrench, voltage, Joystick_inputs):
@@ -131,39 +257,39 @@ def send_arduino(comm_arduino, user_input):
     comm_arduino.write(string.encode())
 
 
-class Joystick(object):
+# class Joystick(object):
 
-    def __init__(self):
-        pygame.init()
-        self.gamepad = pygame.joystick.Joystick(0)
-        self.gamepad.init()
-        self.deadband = 0.1
-        self.timeband = 0.5
-        self.lastpress = time.time()
+#     def __init__(self):
+#         pygame.init()
+#         self.gamepad = pygame.joystick.Joystick(0)
+#         self.gamepad.init()
+#         self.deadband = 0.1
+#         self.timeband = 0.5
+#         self.lastpress = time.time()
 
-    def input(self):
-        pygame.event.get()
-        curr_time = time.time()
-        z1 = self.gamepad.get_axis(0)
-        z2 = self.gamepad.get_axis(1)
-        z3 = self.gamepad.get_axis(4)
-        if abs(z1) < self.deadband:
-            z1 = 0.0
-        if abs(z2) < self.deadband:
-            z2 = 0.0
-        if abs(z3) < self.deadband:
-            z3 = 0.0
-        A_pressed = self.gamepad.get_button(0) and (curr_time - self.lastpress > self.timeband)
-        B_pressed = self.gamepad.get_button(1) and (curr_time - self.lastpress > self.timeband)
-        X_pressed = self.gamepad.get_button(2) and (curr_time - self.lastpress > self.timeband)
-        Y_pressed = self.gamepad.get_button(3) and (curr_time - self.lastpress > self.timeband)
-        START_pressed = self.gamepad.get_button(7) and (curr_time - self.lastpress > self.timeband)
-        STOP_pressed = self.gamepad.get_button(6) and (curr_time - self.lastpress > self.timeband)
-        Right_trigger = self.gamepad.get_button(5)
-        Left_Trigger = self.gamepad.get_button(4)
-        if A_pressed or START_pressed or B_pressed:
-            self.lastpress = curr_time
-        return [z1, z2, z3], A_pressed, B_pressed, X_pressed, Y_pressed, START_pressed, STOP_pressed, Right_trigger, Left_Trigger
+#     def input(self):
+#         pygame.event.get()
+#         curr_time = time.time()
+#         z1 = self.gamepad.get_axis(0)
+#         z2 = self.gamepad.get_axis(1)
+#         z3 = self.gamepad.get_axis(4)
+#         if abs(z1) < self.deadband:
+#             z1 = 0.0
+#         if abs(z2) < self.deadband:
+#             z2 = 0.0
+#         if abs(z3) < self.deadband:
+#             z3 = 0.0
+#         A_pressed = self.gamepad.get_button(0) and (curr_time - self.lastpress > self.timeband)
+#         B_pressed = self.gamepad.get_button(1) and (curr_time - self.lastpress > self.timeband)
+#         X_pressed = self.gamepad.get_button(2) and (curr_time - self.lastpress > self.timeband)
+#         Y_pressed = self.gamepad.get_button(3) and (curr_time - self.lastpress > self.timeband)
+#         START_pressed = self.gamepad.get_button(7) and (curr_time - self.lastpress > self.timeband)
+#         STOP_pressed = self.gamepad.get_button(6) and (curr_time - self.lastpress > self.timeband)
+#         Right_trigger = self.gamepad.get_button(5)
+#         Left_Trigger = self.gamepad.get_button(4)
+#         if A_pressed or START_pressed or B_pressed:
+#             self.lastpress = curr_time
+#         return [z1, z2, z3], A_pressed, B_pressed, X_pressed, Y_pressed, START_pressed, STOP_pressed, Right_trigger, Left_Trigger
 
 
 class Trajectory(object):

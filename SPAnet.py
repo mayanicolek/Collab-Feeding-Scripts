@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import pickle as pkl
 import sys
 from scipy.interpolate import interp1d
-import pygame
+# import pygame
 import pyrealsense2 as rs
 from tkinter import *
 from tkinter.ttk import *
@@ -26,14 +26,6 @@ import matplotlib.pyplot as plt
 
 
 from feeding_scripts.pc_utils import *
-from feeding_scripts.pixel_selector import PixelSelector
-from feeding_scripts.utils import Trajectory, Robot
-from feeding_scripts.feeding import FrankaFeedingBot
-
-
-import robots
-from groundingdino.util.inference import Model
-from segment_anything import sam_model_registry, SamPredictor
 
 import torch
 import torch.nn.functional as F
@@ -71,72 +63,106 @@ def find_face(robot):
         
     return image, depth_image, center
 
-def find_food(robot):
+def find_food(robot, spanet):
     try:
         frames = robot.env.cameras['wrist'].get_frames()
     finally:
         print("*Image Found*")
 
+    
     image = frames['image']
     depth_image = frames['depth']
-    annotated_image, detections, labels = robot.detect_items(image, detection_classes = ['food'])
+    annotated_image, detections, labels = robot.detect_items(image, detection_classes = ['white food'])
     height, width = image.shape[:2]
     combined_mask = np.zeros((height,width), dtype=np.uint8)
     confidence = detections.confidence
     centers = []
     major_axes = []
+    actions = []
     for idx, mask in enumerate(detections.mask):
         if confidence[idx] > 0.5:
             mask = np.array(mask).astype(np.uint8)*255
             mask = robot.cleanup_mask(mask)
+
+            cropped_image = crop_food_item(mask, image)
+            positions, angles, action, scores, rotations, features  = spanet.publish_spanet(cropped_image, "test", True, torch.tensor([[1., 0., 0.]]))
             center, major_axis, skewer_image = robot.get_skewer_action(mask, image)
             centers.append(center)
             major_axes.append(major_axis)
+            actions.append(action)
             combined_mask |= mask
-    # mask = np.array(detections.mask[0]).astype(np.uint8)*255
-    # mask = robot.cleanup_mask(mask)
+             
     mask = robot.cleanup_mask(combined_mask)
     mask = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
     viz_image = np.hstack([annotated_image, mask, skewer_image])
     plt.imshow(viz_image)
     plt.show()
-    return image, depth_image, centers, major_axes
+    print(centers)
+    return image, depth_image, centers, major_axes, actions
 
 def find_dishes():  
     cap0 = cv2.VideoCapture('/dev/video0', cv2.CAP_V4L2)
     _, frame0 = cap0.read()
     img = cv2.cvtColor(frame0, cv2.COLOR_BGR2RGB) 
-    img = img[200:400, 100:450]
+    img = img[200:325, 150:450]
     gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     _, binary_img = cv2.threshold(gray_img, 50, 150, cv2.THRESH_BINARY)
-    dish1_img, dish2_img, dish1_pos, dish2_pos, object_img = identify_dishes(img, gray_img, binary_img)
-    print(dish1_pos, dish2_pos)
+    plate_img, bowl_img, plate_pos, bowl_pos = identify_dishes(img, gray_img, binary_img)
+    print("Plate: ", plate_pos, "Bowl: ", bowl_pos)
     cap0.release()
-    return dish1_pos, dish2_pos, dish1_img, dish2_img
+    return plate_pos, bowl_pos, plate_img, bowl_img, img
 
 def identify_dishes(img, gray_img, binary_img):
     (contoursred1, hierarchy) = cv2.findContours(binary_img, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    counter = 0
+    dish = {"Image": [], "Center": [], "Area": [], "Dish": ['dish1','dish2']}
     for pic, contourred in enumerate(contoursred1):
         area = cv2.contourArea(contourred)
-        if (area > 1000 and area < 20000):
+        if (area > 2000 and area < 20000):
+            print(area)
             x, y, w, h = cv2.boundingRect(contourred)
             gray_img = cv2.rectangle(gray_img, (x, y), (x + w, y + h), (0, 0, 255), 2)
-            if counter == 0: 
-                dish1_img = img[y:y+h,x:x+w]
-                dish1_center = [200 - ((y+h) + y)/2, 350 - ((x+w) + x)/2]
-            elif counter == 1: 
-                dish2_img = img[y:y+h,x:x+w]
-                dish2_center = [200 - ((y+h) + y)/2, 350 - ((x+w) + x)/2]
-            counter += 1
+            dish['Image'].append(img[y:y+h,x:x+w])
+            dish['Center'].append([200 - ((y+h) + y)/2, 350 - ((x+w) + x)/2])
+            dish['Area'].append(area)
 
-    dish1_x = (dish1_center[0]*0.4)/200 + 0.35
-    dish2_x = (dish2_center[0]*0.4)/200 + 0.35
+    if dish['Area'][1] > dish['Area'][0]:
+        dish['Dish'][1] = 'plate'
+        dish['Dish'][0] = 'bowl'
+        plate_img = dish["Image"][1]
+        bowl_img = dish["Image"][0]
+        plate_center = dish['Center'][1]
+        bowl_center = dish['Center'][0]
+    if dish['Area'][0] > dish['Area'][1]:
+        dish['Dish'][0] = 'plate'
+        dish['Dish'][1] = 'bowl'
+        plate_img = dish["Image"][0]
+        bowl_img = dish["Image"][1]        
+        plate_center = dish['Center'][0]
+        bowl_center = dish['Center'][1]
 
-    dish1_y = (dish1_center[1]*0.79)/350 - 0.36
-    dish2_y = (dish2_center[1]*0.79)/350 - 0.36
+    plate_x = (plate_center[0]*0.4)/200 + 0.12
+    bowl_x = (bowl_center[0]*0.4)/200 + 0.12
 
-    dish1_pos = np.array([dish1_x,dish1_y])
-    dish2_pos = np.array([dish2_x,dish2_y])
+    plate_y = (plate_center[1]*0.82)/350 - 0.5
+    bowl_y = (bowl_center[1]*0.82)/350 - 0.5
 
-    return dish1_img, dish2_img, dish1_pos, dish2_pos, gray_img
+    plate_pos = np.array([plate_x,plate_y])
+    bowl_pos = np.array([bowl_x,bowl_y])
+
+    return plate_img, bowl_img, plate_pos, bowl_pos
+
+def crop_food_item(mask, image):
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if contours:
+        largest_contour = max(contours, key=cv2.contourArea)
+        x, y, w, h = cv2.boundingRect(largest_contour)
+        box = np.array([
+            [x, y],
+            [x + w, y],
+            [x + w, y + h],
+            [x, y + h]
+        ], dtype=np.int0)
+        cropped_image = image[y:y+h, x:x+w]
+        return cropped_image
+    else:
+        return None

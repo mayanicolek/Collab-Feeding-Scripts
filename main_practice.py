@@ -6,13 +6,11 @@ from scipy.spatial.transform import Rotation as R
 import math
 import time
 import matplotlib.pyplot as plt
-import rospy
 from feeding_scripts.pc_utils import *
 from feeding_scripts.pixel_selector import PixelSelector
 from feeding_scripts.utils import Trajectory, Robot
 from feeding_scripts.feeding import FrankaFeedingBot
-from food_detector.spanet_detector import SPANetDetector
-import food_detector.ada_feeding_demo_config as conf
+from feeding_scripts.spanet_detector import SPANetDetector
 import robots
 from groundingdino.util.inference import Model
 from segment_anything import sam_model_registry, SamPredictor
@@ -42,9 +40,6 @@ def crop_food_item(mask, image):
         return None
 
 if __name__ == '__main__':
-
-
-    rospy.init_node("main_practice")
     print("Set up Configuration")
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, default="/home/vt-collab/Kiri_Spoon/2024_Kiri_Testing/franka_feeding-main/configs/feeding.yaml")
@@ -57,24 +52,25 @@ if __name__ == '__main__':
     print("Connecting to Robot...")
     robot = FrankaFeedingBot(config)
     print("Connected to Robot")
-    spanet = SPANetDetector(use_cuda=conf.use_cuda)
+    spanet = SPANetDetector()
 
     color_image, depth_image = robot.take_rgbd()
     image = cv2.cvtColor(color_image, cv2.COLOR_BGR2RGB)
+    cur_pos = robot.robot.find_pos(robot.conn)
+    print(cur_pos)
 
     if TEST_KEYPOINT:
         robot.skewering_skill(image, depth_image)
     else:
-        annotated_image, detections, labels = robot.detect_items(image, detection_classes = ['green peas'])
+        annotated_image, detections, labels = robot.detect_items(image, detection_classes = ['eggplant'])
 
         mask = np.array(detections.mask[0]).astype(np.uint8)*255
         mask = robot.cleanup_mask(mask)
 
-
         cropped_image = crop_food_item(mask, image)     
-
         
         positions, angles, actions, scores, rotations, features  = spanet.publish_spanet(cropped_image, "test", True, torch.tensor([[1., 0., 0.]]))
+        
         # Get skewer action
         center, major_axis, skewer_image = robot.get_skewer_action(mask, image)
 
@@ -86,5 +82,7 @@ if __name__ == '__main__':
         print("Major Axis: ", np.degrees(major_axis))
         
         # Call skewering skill
-        robot.skewering_skill(image, depth_image, keypoint=center, major_axis=major_axis, actions = actions)
+        robot.skewering_skill(image, depth_image, keypoint=center, major_axis=major_axis, actions = actions[0])
+        print("skewering done")
+        time.sleep(2)
     robot.robot.go2position(robot.conn)
